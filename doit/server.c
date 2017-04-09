@@ -146,13 +146,16 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 			}
 			else {
 				int sndSocket; 
-				rcvbuf = (char*) malloc(length - sizeof(ClientNum) + 1); 
+				char sbuf[50]; 
+				sprintf(sbuf, "%8d %8s %04x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
+				rcvbuf = (char*) malloc(length - sizeof(ClientNum) + 1 + strlen(sbuf)); 
 				if(rcvbuf == NULL) fatal("No memory for rcvbuf!\n"); 
-				memset(rcvbuf, 0, length - sizeof(ClientNum) + 1); 
-				memcpy(rcvbuf, mybuf + sizeof(ClientNum), length - sizeof(ClientNum)); 
+				memset(rcvbuf, 0, length - sizeof(ClientNum) + 1 + strlen(sbuf)); 
+				memcpy(rcvbuf, sbuf, strlen(sbuf)); 
+				memcpy(rcvbuf+strlen(sbuf), mybuf + sizeof(ClientNum), length - sizeof(ClientNum)); 
 				sndSocket = ConnectTemp -> mySocket; 
-				writeHead(sndSocket, INS_INFO, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
-				write(sndSocket, rcvbuf, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				writeHead(sndSocket, INS_INFO, strlen(rcvbuf)); 
+				write(sndSocket, rcvbuf, strlen(rcvbuf)); 
 				free(rcvbuf); 
 				
 				rcvbuf = (char*) malloc(strlen("Sending is OK!\n") + 2); 
