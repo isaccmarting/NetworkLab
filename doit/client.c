@@ -64,7 +64,7 @@ void *thread_func(int BaseSocket)
 			else 
 			    strcpy((&msg) -> msg_text, mybuf); 
 			// msg.msg_text = mybuf; 
-			puts((&msg) -> msg_text); 
+			// puts((&msg) -> msg_text); 
 			msg.msg_type = getpid(); 
 			if((msgsnd(qid_c2p, &msg, strlen(msg.msg_text), 0) < 0))
 				fatal("No message!\n"); 

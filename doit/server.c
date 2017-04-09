@@ -9,6 +9,8 @@
 #include <netdb.h>
 
 #include <time.h>
+#include <signal.h>
+#include <pthread.h>
 
 #include "FrameRule.h"
 
@@ -22,6 +24,7 @@ struct S_ConnectRecord {
 	word num; 
     char* IP; 
 	unsigned int port; 
+	pthread_t tid; 
 	struct S_ConnectRecord *Last; 
 	struct S_ConnectRecord *Next; 
 }; 
@@ -29,6 +32,24 @@ typedef struct S_ConnectRecord *PtrToS_ConnectRecord;
 typedef PtrToS_ConnectRecord S_ConnectLog; 
 
 S_ConnectLog ConnectList; 
+
+void CtrlC(int signalno)
+{
+	S_ConnectLog ConnectEntry, ConnectTemp; 
+	pthread_t tid; 
+	if(ConnectList == NULL) fatal("Invalid ConnectList!\n"); 
+	for(ConnectEntry = ConnectList -> Next; ConnectEntry != NULL; ConnectEntry = ConnectTemp) {
+		tid = ConnectEntry -> tid; 
+		if(pthread_cancel(tid) != 0) fatal("Canceling thread failed!\n"); 
+		pthread_join(tid, NULL); 
+		close(ConnectEntry -> mySocket); 
+		ConnectTemp = ConnectEntry -> Next; 
+		free(ConnectEntry); 
+    }
+	free(ConnectList); 
+	printf("Exiting OK!\n"); 
+	exit(0); 
+}
 
 void S_thread_func(S_ConnectLog ConnectEntry)
 {
@@ -40,6 +61,9 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 	byte type; 
 	word num, length; 
 	char *mybuf; 
+	
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL); //允许退出线程 
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL); //设置立即取消 
 	
 	if(ConnectEntry == NULL) pthread_exit(0); 
 	mySocket = ConnectEntry -> mySocket; 
@@ -89,7 +113,7 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 			for(ConnectTemp = ConnectList -> Next; ConnectTemp!= NULL; ConnectTemp = ConnectTemp -> Next) {
 				printf("%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
 				len = strlen(mybuf); 
-				sprintf(mybuf + len, "%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
+				sprintf(mybuf + len, "%d\t%s\t%04x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
 			}
 			// head 
 			writeHead(mySocket, ANS_LIST, strlen(mybuf)); 
@@ -135,7 +159,7 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 				if(rcvbuf == NULL) fatal("No memory for rcvbuf!\n"); 
 				memset(rcvbuf, 0, strlen("Sending is OK!\n") + 2); 
 				rcvbuf[0] = 0x00; 
-				strcpy(rcvbuf+sizeof(char), "Sending is OK!\n"); puts(rcvbuf+1); 
+				strcpy(rcvbuf+sizeof(char), "Sending is OK!\n"); // puts(rcvbuf+1); 
 				writeHead(mySocket, ANS_INFO, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
 				write(mySocket, rcvbuf, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
 				free(rcvbuf); 
@@ -179,7 +203,9 @@ int main(int argc, char *argv)
 	socklen_t lenofsock; 
 	pthread_t tid; 
     
-    /**/
+	signal(SIGINT, CtrlC); 
+	
+	/**/
 	memset(&channel, 0, sizeof(channel)); 
 	channel.sin_family = AF_INET; 
 	channel.sin_addr.s_addr = htonl(INADDR_ANY); 
@@ -203,7 +229,7 @@ int main(int argc, char *argv)
 	/**/
 	while(1) {
 		NewSocket = accept(BaseSocket, 0, 0);
-		if(sa < 0) fatal("accept failed"); 
+		if(BaseSocket < 0) fatal("accept failed"); 
 		
 		ConnectEntry = (S_ConnectLog) malloc(sizeof(struct S_ConnectRecord)); 
 		if(ConnectEntry == NULL) fatal("No memory for ConnectEntry!\n"); 
@@ -226,6 +252,8 @@ int main(int argc, char *argv)
 		
 		err = pthread_create(&tid, NULL, S_thread_func, ConnectEntry); 
 		if(err != 0) fatal("Creating thread failed!\n"); 
+		
+		ConnectEntry -> tid = tid; 
 	}
 
 	return 0; 

@@ -13,7 +13,6 @@
 
 #include "FrameRule.h"
 
-#define SERVER_PORT 12345
 #define BUF_SIZE 4096
 
 struct ConnectRecord {
@@ -34,15 +33,11 @@ const char choices[][20] = {
 }; 
 
 key_t key_p2c, key_c2p; 
-volatile int qid_p2c, qid_c2p; 
+int qid_p2c, qid_c2p; 
 volatile int snd_c2p, snd_p2c; 
 
 void *thread_func(int BaseSocket)
 {
-    char rcvChar, bytes; 
-    char buf[BUF_SIZE]; 
-	int i = 0, state = 0, len; 
-	
     struct msgmbuf msg, msg_p2c; 
 	pFrameHead myHead; 
 	byte type; 
@@ -51,31 +46,7 @@ void *thread_func(int BaseSocket)
 	
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL); //允许退出线程 
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL); //设置立即取消 
-    
-//     while(1) {
-// 		bytes = read(BaseSocket, &rcvChar, sizeof(rcvChar)); 
-// 		if(bytes <= 0) continue; 
-// 		if(bytes > 0) {
-// 			state = 1; 
-// 			buf[i++] = rcvChar; 
-// 			if(rcvChar == 0) {
-// 				buf[i] = 0; 
-// 				memset((&msg) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
-// 				strcpy((&msg) -> msg_text, buf); 
-// 				msg.msg_type = getpid(); 
-// 				// puts((&msg) -> msg_text); 
-// 				len = strlen((&msg) -> msg_text); 
-// 				if((msgsnd(qid_c2p, &msg, len, 0) < 0))
-// 					fatal("No message!\n"); 
-// 				// puts((&msg) -> msg_text); 
-// 				snd_c2p = 1; 
-// 				i = 0; 
-// 				state = 0; 
-// 				
-// 			}
-// 			write(1, &rcvChar, sizeof(rcvChar)); 
-// 		}
-// 	}
+
 	while(1) {
 		myHead = readHead(BaseSocket); 
 		if(myHead == NULL) fatal("Invalid head!\n"); 
@@ -93,7 +64,7 @@ void *thread_func(int BaseSocket)
 			else 
 			    strcpy((&msg) -> msg_text, mybuf); 
 			// msg.msg_text = mybuf; 
-			puts((&msg) -> msg_text); 
+			// puts((&msg) -> msg_text); 
 			msg.msg_type = getpid(); 
 			if((msgsnd(qid_c2p, &msg, strlen(msg.msg_text), 0) < 0))
 				fatal("No message!\n"); 
@@ -187,31 +158,24 @@ int main(int argc, char **argv)
 	            if(err != 0)
 	                fatal("Creating thread failed!\n"); 
 				
-				// snd_c2p = 0; 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
             case GET_TIME: 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
 				writeHead(BaseSocket, REQ_TIME, 0); 
-				// write(BaseSocket, "time", strlen("time")); 
-				// snd_c2p = 0; 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
             case GET_NAME: 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
 				writeHead(BaseSocket, REQ_NAME, 0); 
-				// write(BaseSocket, "name", strlen("name")); 
-				// snd_c2p = 0; 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
             case GET_LIST: 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
 				writeHead(BaseSocket, REQ_LIST, 0); 
-				// write(BaseSocket, "list", strlen("list")); 
-				// snd_c2p = 0; 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
             case SEND_INFO: 
@@ -223,36 +187,20 @@ int main(int argc, char **argv)
 				printf("Please input the information: \n"); 
 				if((fgets(mybuf, BUF_SIZE, stdin)) == NULL)
                     fatal("No message!\n"); 
-				puts("Father: "); 
-				puts(mybuf); 
 				memset(sndbuf, 0, BUF_SIZE * sizeof(char)); 
 				ClientNum = htonl(ClientNum); 
 				memset(sndbuf, 0, sizeof(sndbuf)); 
 				memcpy(sndbuf, &ClientNum, sizeof(ClientNum)); 
 				memcpy(sndbuf+sizeof(ClientNum), mybuf, strlen(mybuf)); 
-// 				for(i = 0; i < BUF_SIZE; i++) {
-// 					printf("%02x ", sndbuf[i]); 
-// 					if((i + 1) % 16 == 0)
-// 						printf("\n"); 
-// 				}
 				writeHead(BaseSocket, REQ_INFO, sizeof(ClientNum) + strlen(sndbuf+sizeof(ClientNum))); 
 				write(BaseSocket, sndbuf, sizeof(ClientNum) + strlen(sndbuf+sizeof(ClientNum))); 
-// 				while(snd_c2p == 0); 
 				
-				// snd_c2p = 0; 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
             case EXIT: 
                 quit = 1; 
             case DISCONNECT: 
 				if(ConnectState == 0) break; 
-				// exit child thread 
-// 				msg.msg_type = getpid(); 
-// 				memset((&msg) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
-//                 strcpy((&msg) -> msg_text, "exit"); 
-//                 len = strlen((&msg) -> msg_text); 
-//                 if((msgsnd(qid_p2c, &msg, len, 0)) < 0)
-//                     fatal("Adding message error!\n"); 
 				if(pthread_cancel(tid) != 0) fatal("Canceling thread failed!\n"); 
 				pthread_join(tid, NULL); 
 				
@@ -266,15 +214,10 @@ int main(int argc, char **argv)
                 break; 
         }
 		
-		// sleep(10); 
 		while(snd_c2p != 0 && (msgrcv(qid_c2p, &msg_c2p, BUF_SIZE, 0, 0)) > 0) {
-			// while((msgrcv(qid_c2p, &msg_c2p, BUF_SIZE, 0, 0)) >= 0) {
-			for(i = 0; i < strlen(msg_c2p.msg_text); i++)
-				printf("%02x ", msg_c2p.msg_text[i]); 
 			printf("The message is %s\n\n", msg_c2p.msg_text); 
 			snd_c2p--; 
 			memset((&msg_c2p) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
-			// }
 		}
     }
 	
