@@ -30,90 +30,163 @@ typedef PtrToS_ConnectRecord S_ConnectLog;
 
 S_ConnectLog ConnectList; 
 
-int fatal(char *string)
-{
-	printf("%s\n", string); 
-	exit(1); 
-}
-
 void S_thread_func(S_ConnectLog ConnectEntry)
 {
 	int mySocket; 
-	char mybuf[BUF_SIZE]; 
+	// char mybuf[BUF_SIZE]; 
 	int bytes, myQuit = 0; 
 	S_ConnectLog ConnectTemp; 
 	
+	pFrameHead myHead; 
+	byte type; 
+	word num, length; 
+	char *mybuf; 
+	
 	if(ConnectEntry == NULL) pthread_exit(0); 
 	mySocket = ConnectEntry -> mySocket; 
-	memset(mybuf, 0, sizeof(mybuf)); 
-	strcpy(mybuf, "hello\n"); 
-	bytes = strlen(mybuf) + 1; 
-	write(mySocket, mybuf, bytes); 
+	mybuf = "hello\n"; puts(mybuf); 
+	// head 
+	writeHead(mySocket, ANS_CONN, strlen(mybuf)); 
+	puts(mybuf); 
+	// body 
+	write(mySocket, mybuf, strlen(mybuf)); 
+	puts(mybuf); 
 	
 	while(myQuit == 0) {
-		memset(mybuf, 0, sizeof(mybuf)); 
 		// 
-		bytes = read(mySocket, mybuf, BUF_SIZE); 
-		puts(mybuf); 
-		if(bytes > 0) {
-			if(strcmp(mybuf, "1\n") == 0) {
-				memset(mybuf, 0, sizeof(mybuf)); 
-				strcpy(mybuf, "hi"); 
-				bytes = strlen(mybuf) + 1; 
-				write(mySocket, mybuf, bytes); 
+// 		bytes = read(mySocket, mybuf, BUF_SIZE); 
+// 		puts(mybuf); 
+// 		if(bytes > 0) {
+// 			if(strcmp(mybuf, "1\n") == 0) {
+// 				memset(mybuf, 0, sizeof(mybuf)); 
+// 				strcpy(mybuf, "hi"); 
+// 				bytes = strlen(mybuf) + 1; 
+// 				write(mySocket, mybuf, bytes); 
+// 			}
+// 			else if(strcmp(mybuf, "disconnect") == 0) {
+// 				printf("Disconnect!\n"); 
+// 				if(ConnectEntry != NULL) {
+// 					ConnectTemp = ConnectEntry -> Last; 
+// 					if(ConnectTemp == NULL) fatal("wrong list!\n"); 
+// 					ConnectTemp -> Next = ConnectEntry -> Next; 
+// 					if(ConnectTemp -> Next != NULL)
+// 						ConnectTemp -> Next -> Last = ConnectTemp; 
+// 					free(ConnectEntry -> IP); 
+// 					free(ConnectEntry); 
+// 				}
+// 				close(mySocket); 
+// 				myQuit = 1; 
+// 			}
+// 			else if(strcmp(mybuf, "time") == 0) {
+// 				time_t timer; 
+// 				struct tm *tblock; 
+// 				timer = time(NULL); 
+// 				tblock = localtime(&timer); 
+// 				memset(mybuf, 0, sizeof(mybuf)); 
+// 				strcpy(mybuf, asctime(tblock)); 
+// 				bytes = strlen(mybuf) + 1; 
+// 				write(mySocket, mybuf, bytes); 
+// 			}
+// 			else if(strcmp(mybuf, "name") == 0) {
+// 				char hostname[100]; 
+// 				int err; 
+// 				err = gethostname(hostname, sizeof(hostname)); 
+// 				if(err < 0) {printf("hostname failed!\n"); continue; }
+// 				memset(mybuf, 0, sizeof(mybuf)); 
+// 				strcpy(mybuf, hostname); 
+// 				bytes = strlen(mybuf) + 1; 
+// 				write(mySocket, mybuf, bytes); 
+// 			}
+// 			else if(strcmp(mybuf, "list") == 0) {
+// 				int len; 
+// 				memset(mybuf, 0, sizeof(mybuf)); 
+// 				if(ConnectList == NULL) fatal("ConnectList is NULL!\n"); 
+// 				for(ConnectTemp = ConnectList -> Next; ConnectTemp!= NULL; ConnectTemp = ConnectTemp -> Next) {
+// 					printf("%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
+// 					len = strlen(mybuf); 
+// 					sprintf(mybuf + len, "%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
+// 				}
+// 				bytes = strlen(mybuf) + 1; 
+// 				write(mySocket, mybuf, bytes); 
+// 			}
+// 			else if(strcmp(mybuf, "send") == 0) {
+// 				int len; 
+// 				memset(mybuf, 0, sizeof(mybuf)); 
+// 				
+// 				bytes = strlen(mybuf) + 1; 
+// 				write(mySocket, mybuf, bytes); 
+// 			}
+// 		}
+		
+		myHead = readHead(mySocket); 
+		if(myHead == NULL) {printf("Invalid myHead\n"); continue; }
+		type = myHead -> type; 
+		num = ntohl(myHead -> num); 
+		length = ntohl(myHead -> length); 
+		if(type == REQ_TIME) {
+			time_t timer; 
+			struct tm *tblock; 
+			timer = time(NULL); 
+			tblock = localtime(&timer); 
+			mybuf = asctime(tblock); 
+			// head 
+			writeHead(mySocket, ANS_TIME, strlen(mybuf)); 
+			// body 
+			write(mySocket, mybuf, strlen(mybuf)); 
+			// free(mybuf); 
+		}
+		else if(type == REQ_NAME) {
+			int err; 
+			mybuf = (char*) malloc(sizeof(char) * 100); 
+			memset(mybuf, 0, sizeof(char) * 100); 
+			if(mybuf == NULL) fatal("No memory for mybuf!\n"); 
+			err = gethostname(mybuf, sizeof(char) * 100); 
+			if(err < 0) {printf("hostname failed!\n"); continue; }
+			// head 
+			writeHead(mySocket, ANS_NAME, strlen(mybuf)); 
+			// body 
+			write(mySocket, mybuf, strlen(mybuf)); 
+			free(mybuf); 
+		}
+		else if(type == REQ_LIST) {
+			int len; 
+			if(ConnectList == NULL) fatal("ConnectList is NULL!\n"); 
+			mybuf = (char*) malloc(sizeof(char) * BUF_SIZE); 
+			memset(mybuf, 0, sizeof(char) * BUF_SIZE); 
+			if(mybuf == NULL) fatal("No memory for mybuf!\n"); 
+			for(ConnectTemp = ConnectList -> Next; ConnectTemp!= NULL; ConnectTemp = ConnectTemp -> Next) {
+				printf("%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
+				len = strlen(mybuf); 
+				sprintf(mybuf + len, "%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
 			}
-			else if(strcmp(mybuf, "disconnect") == 0) {
-				printf("Disconnect!\n"); 
-				if(ConnectEntry != NULL) {
-					ConnectTemp = ConnectEntry -> Last; 
-					if(ConnectTemp == NULL) fatal("wrong list!\n"); 
-					ConnectTemp -> Next = ConnectEntry -> Next; 
-					if(ConnectTemp -> Next != NULL)
-						ConnectTemp -> Next -> Last = ConnectTemp; 
-					free(ConnectEntry); 
-				}
-				close(mySocket); 
-				myQuit = 1; 
+			// head 
+			writeHead(mySocket, ANS_LIST, strlen(mybuf)); 
+			// body 
+			write(mySocket, mybuf, strlen(mybuf)); 
+			free(mybuf); 
+		}
+		else if(type == REQ_INFO) {
+		}
+		else if(type == REQ_DISC) {
+			printf("Disconnect!\n"); 
+			if(ConnectEntry != NULL) {
+				ConnectTemp = ConnectEntry -> Last; 
+				if(ConnectTemp == NULL) fatal("wrong list!\n"); 
+				ConnectTemp -> Next = ConnectEntry -> Next; 
+				if(ConnectTemp -> Next != NULL)
+					ConnectTemp -> Next -> Last = ConnectTemp; 
+				// free(ConnectEntry -> IP); 
+				free(ConnectEntry); 
 			}
-			else if(strcmp(mybuf, "time") == 0) {
-				time_t timer; 
-				struct tm *tblock; 
-				timer = time(NULL); 
-				tblock = localtime(&timer); 
-				memset(mybuf, 0, sizeof(mybuf)); 
-				strcpy(mybuf, asctime(tblock)); 
-				bytes = strlen(mybuf) + 1; 
-				write(mySocket, mybuf, bytes); 
-			}
-			else if(strcmp(mybuf, "name") == 0) {
-				char hostname[100]; 
-				int err; 
-				err = gethostname(hostname, sizeof(hostname)); 
-				if(err < 0) {printf("hostname failed!\n"); continue; }
-				memset(mybuf, 0, sizeof(mybuf)); 
-				strcpy(mybuf, hostname); 
-				bytes = strlen(mybuf) + 1; 
-				write(mySocket, mybuf, bytes); 
-			}
-			else if(strcmp(mybuf, "list") == 0) {
-				int len; 
-				memset(mybuf, 0, sizeof(mybuf)); 
-				if(ConnectList == NULL) fatal("ConnectList is NULL!\n"); 
-				for(ConnectTemp = ConnectList -> Next; ConnectTemp!= NULL; ConnectTemp = ConnectTemp -> Next) {
-					printf("%d %s %06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
-					len = strlen(mybuf); 
-					sprintf(mybuf + len, "%d %s %06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
-				}
-				bytes = strlen(mybuf) + 1; 
-				write(mySocket, mybuf, bytes); 
-			}
-			else if(strcmp(mybuf, "send") == 0) {
-				int len; 
-				memset(mybuf, 0, sizeof(mybuf)); 
-				
-				bytes = strlen(mybuf) + 1; 
-				write(mySocket, mybuf, bytes); 
-			}
+			close(mySocket); 
+			myQuit = 1; 
+		}
+		else if(length != 0) {
+			mybuf = (char*) malloc(sizeof(char) * length); 
+			memset(mybuf, 0, sizeof(char) * length); 
+			if(mybuf == NULL) fatal("No memory for mybuf!\n");
+			readFrame(mySocket, mybuf, length); 
+			free(mybuf); 
 		}
 	}
 }
