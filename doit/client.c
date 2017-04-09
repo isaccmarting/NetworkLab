@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 				if(ConnectEntry == NULL)
 				    fatal("No memory to connect!\n"); 
 				printf("Please input server IP: "); 
-				gets(ConnectEntry -> IP); 
+				scanf("%s", &(ConnectEntry -> IP)); 
 				printf("Please input server port: "); 
 				scanf("%d", &(ConnectEntry -> port)); 
 				host = gethostbyname(ConnectEntry -> IP); 
