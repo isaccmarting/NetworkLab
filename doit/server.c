@@ -33,8 +33,7 @@ S_ConnectLog ConnectList;
 void S_thread_func(S_ConnectLog ConnectEntry)
 {
 	int mySocket; 
-	// char mybuf[BUF_SIZE]; 
-	int bytes, myQuit = 0; 
+	int myQuit = 0; 
 	S_ConnectLog ConnectTemp; 
 	
 	pFrameHead myHead; 
@@ -44,80 +43,13 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 	
 	if(ConnectEntry == NULL) pthread_exit(0); 
 	mySocket = ConnectEntry -> mySocket; 
-	mybuf = "hello\n"; puts(mybuf); 
+	mybuf = "hello"; 
 	// head 
 	writeHead(mySocket, ANS_CONN, strlen(mybuf)); 
-	puts(mybuf); 
 	// body 
 	write(mySocket, mybuf, strlen(mybuf)); 
-	puts(mybuf); 
 	
 	while(myQuit == 0) {
-		// 
-// 		bytes = read(mySocket, mybuf, BUF_SIZE); 
-// 		puts(mybuf); 
-// 		if(bytes > 0) {
-// 			if(strcmp(mybuf, "1\n") == 0) {
-// 				memset(mybuf, 0, sizeof(mybuf)); 
-// 				strcpy(mybuf, "hi"); 
-// 				bytes = strlen(mybuf) + 1; 
-// 				write(mySocket, mybuf, bytes); 
-// 			}
-// 			else if(strcmp(mybuf, "disconnect") == 0) {
-// 				printf("Disconnect!\n"); 
-// 				if(ConnectEntry != NULL) {
-// 					ConnectTemp = ConnectEntry -> Last; 
-// 					if(ConnectTemp == NULL) fatal("wrong list!\n"); 
-// 					ConnectTemp -> Next = ConnectEntry -> Next; 
-// 					if(ConnectTemp -> Next != NULL)
-// 						ConnectTemp -> Next -> Last = ConnectTemp; 
-// 					free(ConnectEntry -> IP); 
-// 					free(ConnectEntry); 
-// 				}
-// 				close(mySocket); 
-// 				myQuit = 1; 
-// 			}
-// 			else if(strcmp(mybuf, "time") == 0) {
-// 				time_t timer; 
-// 				struct tm *tblock; 
-// 				timer = time(NULL); 
-// 				tblock = localtime(&timer); 
-// 				memset(mybuf, 0, sizeof(mybuf)); 
-// 				strcpy(mybuf, asctime(tblock)); 
-// 				bytes = strlen(mybuf) + 1; 
-// 				write(mySocket, mybuf, bytes); 
-// 			}
-// 			else if(strcmp(mybuf, "name") == 0) {
-// 				char hostname[100]; 
-// 				int err; 
-// 				err = gethostname(hostname, sizeof(hostname)); 
-// 				if(err < 0) {printf("hostname failed!\n"); continue; }
-// 				memset(mybuf, 0, sizeof(mybuf)); 
-// 				strcpy(mybuf, hostname); 
-// 				bytes = strlen(mybuf) + 1; 
-// 				write(mySocket, mybuf, bytes); 
-// 			}
-// 			else if(strcmp(mybuf, "list") == 0) {
-// 				int len; 
-// 				memset(mybuf, 0, sizeof(mybuf)); 
-// 				if(ConnectList == NULL) fatal("ConnectList is NULL!\n"); 
-// 				for(ConnectTemp = ConnectList -> Next; ConnectTemp!= NULL; ConnectTemp = ConnectTemp -> Next) {
-// 					printf("%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
-// 					len = strlen(mybuf); 
-// 					sprintf(mybuf + len, "%d\t%s\t%06x\n", ConnectTemp -> num, ConnectTemp -> IP, ConnectTemp -> port); 
-// 				}
-// 				bytes = strlen(mybuf) + 1; 
-// 				write(mySocket, mybuf, bytes); 
-// 			}
-// 			else if(strcmp(mybuf, "send") == 0) {
-// 				int len; 
-// 				memset(mybuf, 0, sizeof(mybuf)); 
-// 				
-// 				bytes = strlen(mybuf) + 1; 
-// 				write(mySocket, mybuf, bytes); 
-// 			}
-// 		}
-		
 		myHead = readHead(mySocket); 
 		if(myHead == NULL) {printf("Invalid myHead\n"); continue; }
 		type = myHead -> type; 
@@ -166,9 +98,52 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 			free(mybuf); 
 		}
 		else if(type == REQ_INFO) {
+			word ClientNum; 
+			char *rcvbuf; 
+			if(ConnectList == NULL) fatal("Invalid ConnectList!\n"); 
+			mybuf = (char*) malloc(sizeof(char) * length + 1); 
+			if(mybuf == NULL) fatal("No memory for mybuf!\n"); 
+			memset(mybuf, 0, sizeof(char) * length + 1); 
+			readFrame(mySocket, mybuf, sizeof(char) * length); 
+			memcpy(&ClientNum, mybuf, sizeof(ClientNum)); 
+			ClientNum = ntohl(ClientNum); 
+			for(ConnectTemp = ConnectList -> Next; ConnectTemp != NULL; ConnectTemp = ConnectTemp -> Next) {
+				if(ConnectTemp -> num == ClientNum) break; 
+			}
+			if(ConnectTemp == NULL) {
+				rcvbuf = (char*) malloc(strlen("The client does not exist!\n") + 2); 
+				if(rcvbuf == NULL) fatal("No memory for rcvbuf!\n"); 
+				memset(rcvbuf, 0, strlen("The client does not exist!\n") + 2); 
+				rcvbuf[0] = 0xFF; // error code 
+				strcpy(rcvbuf+sizeof(char), "The client does not exist!\n"); 
+				writeHead(mySocket, ANS_INFO, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				write(mySocket, rcvbuf, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				free(rcvbuf); 
+			}
+			else {
+				int sndSocket; 
+				rcvbuf = (char*) malloc(length - sizeof(ClientNum) + 1); 
+				if(rcvbuf == NULL) fatal("No memory for rcvbuf!\n"); 
+				memset(rcvbuf, 0, length - sizeof(ClientNum) + 1); 
+				memcpy(rcvbuf, mybuf + sizeof(ClientNum), length - sizeof(ClientNum)); 
+				sndSocket = ConnectTemp -> mySocket; 
+				writeHead(sndSocket, INS_INFO, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				write(sndSocket, rcvbuf, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				free(rcvbuf); 
+				
+				rcvbuf = (char*) malloc(strlen("Sending is OK!\n") + 2); 
+				if(rcvbuf == NULL) fatal("No memory for rcvbuf!\n"); 
+				memset(rcvbuf, 0, strlen("Sending is OK!\n") + 2); 
+				rcvbuf[0] = 0x00; 
+				strcpy(rcvbuf+sizeof(char), "Sending is OK!\n"); puts(rcvbuf+1); 
+				writeHead(mySocket, ANS_INFO, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				write(mySocket, rcvbuf, sizeof(char) + strlen(rcvbuf+sizeof(char))); 
+				free(rcvbuf); 
+			}
+			free(mybuf); 
 		}
 		else if(type == REQ_DISC) {
-			printf("Disconnect!\n"); 
+			printf("Disconnect: %d\t%s\t%04x\n", ConnectEntry -> num, ConnectEntry -> IP, ConnectEntry -> port); 
 			if(ConnectEntry != NULL) {
 				ConnectTemp = ConnectEntry -> Last; 
 				if(ConnectTemp == NULL) fatal("wrong list!\n"); 
@@ -193,8 +168,7 @@ void S_thread_func(S_ConnectLog ConnectEntry)
 
 int main(int argc, char *argv)
 {
-	int s, b, l, fd, sa, bytes, on = 1; 
-	char buf[BUF_SIZE]; 
+	int bytes, on = 1; 
 	struct sockaddr_in channel, peeraddr; 
 	S_ConnectLog ConnectEntry; 
 	
