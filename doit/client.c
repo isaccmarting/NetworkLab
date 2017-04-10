@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 				if(ConnectEntry == NULL)
 				    fatal("No memory to connect!\n"); 
 				printf("Please input server IP: "); 
-				scanf("%s", &(ConnectEntry -> IP)); 
+				gets(ConnectEntry -> IP); 
 				printf("Please input server port: "); 
 				scanf("%d", &(ConnectEntry -> port)); 
 				host = gethostbyname(ConnectEntry -> IP); 
@@ -215,7 +215,7 @@ int main(int argc, char **argv)
         }
 		
 		while(snd_c2p != 0 && (msgrcv(qid_c2p, &msg_c2p, BUF_SIZE, 0, 0)) > 0) {
-			printf("The message is %s\n\n", msg_c2p.msg_text); 
+			printf("The message is \n%s\n\n", msg_c2p.msg_text); 
 			snd_c2p--; 
 			memset((&msg_c2p) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
 		}
