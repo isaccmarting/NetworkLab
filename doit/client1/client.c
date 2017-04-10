@@ -15,6 +15,7 @@
 
 #define BUF_SIZE 4096
 
+// save server IP and port 
 struct ConnectRecord {
     char IP[30]; 
     unsigned int port; 
@@ -22,11 +23,13 @@ struct ConnectRecord {
 typedef struct ConnectRecord *PtrToConnectRecord; 
 typedef PtrToConnectRecord ConnectLog; 
 
+// the message structure 
 struct msgmbuf {
 	long msg_type; 
 	char msg_text[BUF_SIZE]; 
 };
 
+// enum type of the menu 
 enum choice {CONNECT, DISCONNECT, GET_TIME, GET_NAME, GET_LIST, SEND_INFO, EXIT}; 
 const char choices[][20] = {
     "connect", "disconnect", "get_time", "get_name", "get_list", "send_info", "exit"
@@ -36,6 +39,7 @@ key_t key_p2c, key_c2p;
 int qid_p2c, qid_c2p; 
 volatile int snd_c2p, snd_p2c; 
 
+// the thread receives packets from the server and send message to the main thread 
 void *thread_func(int BaseSocket)
 {
     struct msgmbuf msg, msg_p2c; 
@@ -50,6 +54,7 @@ void *thread_func(int BaseSocket)
 	while(1) {
 		myHead = readHead(BaseSocket); 
 		if(myHead == NULL) fatal("Invalid head!\n"); 
+		// test if a valid packet 
 		if(myHead -> begin[0] == BEGIN0 && myHead -> begin[1] == BEGIN1 && myHead -> begin[2] == BEGIN2) {
 			type = myHead -> type; 
 			num = ntohl(myHead -> num); 
@@ -57,14 +62,14 @@ void *thread_func(int BaseSocket)
 			mybuf = (char*) malloc(sizeof(char) * length + 1); 
 			if(mybuf == NULL) fatal("No memory for mybuf!\n"); 
 			memset(mybuf, 0, sizeof(char) * length + 1); 
+			// read the contents of the packet 
 			readFrame(BaseSocket, mybuf, length); 
 			memset((&msg) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
+			// the format of sending answer: ErrorCode + information 
 			if(type == ANS_INFO) 
 				strcpy((&msg) -> msg_text, mybuf + 1); 
 			else 
 			    strcpy((&msg) -> msg_text, mybuf); 
-			// msg.msg_text = mybuf; 
-			// puts((&msg) -> msg_text); 
 			msg.msg_type = getpid(); 
 			if((msgsnd(qid_c2p, &msg, strlen(msg.msg_text), 0) < 0))
 				fatal("No message!\n"); 
@@ -114,6 +119,7 @@ int main(int argc, char **argv)
     
     while(quit == 0) 
     {
+		// list the menu 
 		printf("Please choose a following number:\n"); 
         for(i = 1; i <= 7; i++)
             if(ConnectState == 0 && i > 1 && i < 7)
@@ -125,14 +131,16 @@ int main(int argc, char **argv)
         client_choice--;
         switch(client_choice)
         {
-            case CONNECT: 
+			case CONNECT: // connect 
                 if(ConnectState != 0) {
                     printf("Already connected!\n"); 
                     break; 
                 }
+				// set socket 
 				BaseSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP); 
 				if(BaseSocket < 0) fatal("Socket failed!"); 
 				
+				// get server IP and port 
 				ConnectEntry = (ConnectLog) malloc(sizeof(struct ConnectRecord)); 
 				if(ConnectEntry == NULL)
 				    fatal("No memory to connect!\n"); 
@@ -144,12 +152,14 @@ int main(int argc, char **argv)
 				if(host < 0)
 				    fatal("gethostbyname failed!\n"); 
 				
+				// set channel 
 				memset(&channel, 0, sizeof(channel)); 
 				channel.sin_family = AF_INET; 
 				memcpy(&channel.sin_addr.s_addr, host -> h_addr, host -> h_length); 
 				channel.sin_port = htons(ConnectEntry -> port); 
 
-	            ClientConnect = connect(BaseSocket, (struct sockaddr*) &channel, sizeof(channel)); 
+				// connect socket and channel 
+				ClientConnect = connect(BaseSocket, (struct sockaddr*) &channel, sizeof(channel)); 
 	            if(ClientConnect < 0) fatal("connect failed"); 
 	            
 				old_snd_c2p = snd_c2p; 
@@ -158,29 +168,31 @@ int main(int argc, char **argv)
 	            if(err != 0)
 	                fatal("Creating thread failed!\n"); 
 				
+				// wait the thread to send message to the main thread 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
-            case GET_TIME: 
+			case GET_TIME: // get the server time 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
 				writeHead(BaseSocket, REQ_TIME, 0); 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
-            case GET_NAME: 
+			case GET_NAME: // get the server name 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
 				writeHead(BaseSocket, REQ_NAME, 0); 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
-            case GET_LIST: 
+			case GET_LIST: // get the connection list 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
 				writeHead(BaseSocket, REQ_LIST, 0); 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
-            case SEND_INFO: 
+			case SEND_INFO: // send information to other clients 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
+				// get client number and information to send 
 				printf("Please input the ClientNum: "); 
 				scanf("%ld", &ClientNum); getchar(); 
 				memset(mybuf, 0, BUF_SIZE * sizeof(char)); 
@@ -188,6 +200,7 @@ int main(int argc, char **argv)
 				if((fgets(mybuf, BUF_SIZE, stdin)) == NULL)
                     fatal("No message!\n"); 
 				memset(sndbuf, 0, BUF_SIZE * sizeof(char)); 
+				// format: ClientNum + information 
 				ClientNum = htonl(ClientNum); 
 				memset(sndbuf, 0, sizeof(sndbuf)); 
 				memcpy(sndbuf, &ClientNum, sizeof(ClientNum)); 
@@ -197,10 +210,11 @@ int main(int argc, char **argv)
 				
 				while(snd_c2p == old_snd_c2p); 
                 break; 
-            case EXIT: 
+			case EXIT: // exit 
                 quit = 1; 
-            case DISCONNECT: 
+			case DISCONNECT: // disconnect 
 				if(ConnectState == 0) break; 
+				// cancel the thread 
 				if(pthread_cancel(tid) != 0) fatal("Canceling thread failed!\n"); 
 				pthread_join(tid, NULL); 
 				
@@ -214,6 +228,7 @@ int main(int argc, char **argv)
                 break; 
         }
 		
+		// receive message from the thread 
 		while(snd_c2p != 0 && (msgrcv(qid_c2p, &msg_c2p, BUF_SIZE, 0, 0)) > 0) {
 			printf("The message is \n%s\n\n", msg_c2p.msg_text); 
 			snd_c2p--; 
