@@ -35,6 +35,5 @@ typedef struct FrameHead *PtrToFrameHead;
 typedef PtrToFrameHead pFrameHead; 
 
 extern int fatal(char *string); 
-extern int writeHead(int mySocket, byte type, word length); 
-extern pFrameHead readHead(int mySocket); 
-extern int readFrame(int mySocket, char* buf, int size_frame); 
+extern int writePacket(int mySocket, byte type, char* buf, word length); 
+extern char* readPacket(int mySocket, pFrameHead myHead); 

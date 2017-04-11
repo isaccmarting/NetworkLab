@@ -51,33 +51,26 @@ void *thread_func(int BaseSocket)
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL); //允许退出线程 
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL); //设置立即取消 
 
+	myHead = (pFrameHead) malloc(sizeof(struct FrameHead)); 
+	if(myHead == NULL) fatal("No memory for myHead!\n"); 
 	while(1) {
-		myHead = readHead(BaseSocket); 
-		if(myHead == NULL) fatal("Invalid head!\n"); 
+		mybuf = readPacket(BaseSocket, myHead); 
 		// test if a valid packet 
-		if(myHead -> begin[0] == BEGIN0 && myHead -> begin[1] == BEGIN1 && myHead -> begin[2] == BEGIN2) {
-			type = myHead -> type; 
-			num = ntohl(myHead -> num); 
-			length = ntohl(myHead -> length); 
-			mybuf = (char*) malloc(sizeof(char) * length + 1); 
-			if(mybuf == NULL) fatal("No memory for mybuf!\n"); 
-			memset(mybuf, 0, sizeof(char) * length + 1); 
-			// read the contents of the packet 
-			readFrame(BaseSocket, mybuf, length); 
-			memset((&msg) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
-			// the format of sending answer: ErrorCode + information 
-			if(type == ANS_INFO) 
-				strcpy((&msg) -> msg_text, mybuf + 1); 
-			else 
-			    strcpy((&msg) -> msg_text, mybuf); 
-			msg.msg_type = getpid(); 
-			if((msgsnd(qid_c2p, &msg, strlen(msg.msg_text), 0) < 0))
-				fatal("No message!\n"); 
-			free(mybuf); 
-			snd_c2p++; 
-		}
-	    free(myHead); 
+		type = myHead -> type; 
+		// read the contents of the packet 
+		memset((&msg) -> msg_text, 0, BUF_SIZE * sizeof(char)); 
+		// the format of sending answer: ErrorCode + information 
+		if(type == ANS_INFO) 
+			strcpy((&msg) -> msg_text, mybuf + 1); 
+		else 
+			strcpy((&msg) -> msg_text, mybuf); 
+		msg.msg_type = getpid(); 
+		if((msgsnd(qid_c2p, &msg, strlen(msg.msg_text), 0) < 0))
+			fatal("No message!\n"); 
+		if(myHead -> length > 0) free(mybuf); 
+		snd_c2p++; 
 	}
+	free(myHead); 
     return NULL; 
 }
 
@@ -174,19 +167,19 @@ int main(int argc, char **argv)
 			case GET_TIME: // get the server time 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
-				writeHead(BaseSocket, REQ_TIME, 0); 
+				writePacket(BaseSocket, REQ_TIME, sndbuf, 0); 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
 			case GET_NAME: // get the server name 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
-				writeHead(BaseSocket, REQ_NAME, 0); 
+				writePacket(BaseSocket, REQ_NAME, sndbuf, 0); 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
 			case GET_LIST: // get the connection list 
 				if(ConnectState == 0) {printf("Not connected!\n"); break; } 
 				old_snd_c2p = snd_c2p; 
-				writeHead(BaseSocket, REQ_LIST, 0); 
+				writePacket(BaseSocket, REQ_LIST, sndbuf, 0); 
 				while(snd_c2p == old_snd_c2p); 
                 break; 
 			case SEND_INFO: // send information to other clients 
@@ -199,14 +192,12 @@ int main(int argc, char **argv)
 				printf("Please input the information: \n"); 
 				if((fgets(mybuf, BUF_SIZE, stdin)) == NULL)
                     fatal("No message!\n"); 
-				memset(sndbuf, 0, BUF_SIZE * sizeof(char)); 
 				// format: ClientNum + information 
 				ClientNum = htonl(ClientNum); 
 				memset(sndbuf, 0, sizeof(sndbuf)); 
 				memcpy(sndbuf, &ClientNum, sizeof(ClientNum)); 
 				memcpy(sndbuf+sizeof(ClientNum), mybuf, strlen(mybuf)); 
-				writeHead(BaseSocket, REQ_INFO, sizeof(ClientNum) + strlen(sndbuf+sizeof(ClientNum))); 
-				write(BaseSocket, sndbuf, sizeof(ClientNum) + strlen(sndbuf+sizeof(ClientNum))); 
+				writePacket(BaseSocket, REQ_INFO, sndbuf, sizeof(ClientNum) + strlen(sndbuf+sizeof(ClientNum))); 
 				
 				while(snd_c2p == old_snd_c2p); 
                 break; 
@@ -219,7 +210,7 @@ int main(int argc, char **argv)
 				pthread_join(tid, NULL); 
 				
 				// close socket 
-				writeHead(BaseSocket, REQ_DISC, 0); 
+				writePacket(BaseSocket, REQ_DISC, sndbuf, 0); 
                 close(BaseSocket); 
                 ConnectState = 0; 
                 break; 
