@@ -105,7 +105,7 @@ void freeHead(http_head pHttpHead)
 
 void notImplemented(int cSocket)
 {
-	char buf[] = "HTTP/1.0 501 Not Implemented\r\nDate: %s\r\nServer: %s \r\nContent-type: text/html\r\nContent-length: %d\r\n\r\n%s"; 
+	char buf[] = "HTTP/1.1 501 Not Implemented\r\nDate:  %s\r\nServer: %s\r\nContent-type: text/html\r\nContent-length: %d\r\nCache-Control: max-age=0\r\nExpires: %s\r\nVary: Accept-Encoding\r\n\r\n%s"; 
 	char text[] = "<html><title>Not Implemented</title><body><p>The server does not recognize the request method. </p></body></html>"; 
 	char sendbuf[500]; 
 	char *mytime, hostname[30]; 
@@ -117,14 +117,14 @@ void notImplemented(int cSocket)
 	strcat(mytime, "GMT"); 
 	err = gethostname(hostname, sizeof(hostname)); 
 	if(err < 0) {printf("Error gethostname!\n"); exit(1); }
-	sprintf(sendbuf, buf, mytime,  hostname, strlen(text), text); 
+	sprintf(sendbuf, buf, mytime,  hostname, strlen(text), mytime, text); 
 	write(cSocket, sendbuf, strlen(sendbuf)); 
 	return ; 
 }
 
 void notFound(int cSocket)
 {
-	char buf[] = "HTTP/1.0 404 File Not Found\r\nDate: %s\r\nServer: %s \r\nContent-type: text/html\r\nContent-length: %d\r\n\r\n%s"; 
+	char buf[] = "HTTP/1.1 404 File Not Found\r\nDate:  %s\r\nServer: %s\r\nContent-type: text/html\r\nContent-length: %d\r\nCache-Control: max-age=0\r\nExpires: %s\r\nVary: Accept-Encoding\r\n\r\n%s"; 
 	char text[] = "<html><title>File Not Found</title><body><p>The server could not find the resource.</p></body></html>"; 
 	char sendbuf[500]; 
 	char *mytime, hostname[30]; 
@@ -136,7 +136,7 @@ void notFound(int cSocket)
 	strcat(mytime, "GMT"); 
 	err = gethostname(hostname, sizeof(hostname)); 
 	if(err < 0) {printf("Error gethostname!\n"); exit(1); }
-	sprintf(sendbuf, buf, mytime,  hostname, strlen(text), text); 
+	sprintf(sendbuf, buf, mytime,  hostname, strlen(text), mytime, text); 
 	write(cSocket, sendbuf, strlen(sendbuf)); 
 	return ; 
 }
@@ -179,9 +179,12 @@ char* ftype(char *filename)
 
 void sendFile(int cSocket, char *filename)
 {
-	char buf[] = "HTTP/1.0 200 OK\r\nContent-type: %s\r\nContent-length: %d\r\n\r\n"; 
+	char buf[] = "HTTP/1.1 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nCache-Control: max-age=0\r\nExpires: %s\r\nVary: Accept-Encoding\r\n\r\n"; 
 	char fText[MAX_FILE_TEMP_LEN], headBuf[300]; 
 	FILE *pFile; 
+	char *mytime, hostname[30]; 
+	int err; 
+	time_t t; 
 	char fPath[50], *fType; 
 	unsigned long fLength; 
 	int bytes; 
@@ -194,12 +197,19 @@ void sendFile(int cSocket, char *filename)
 		return ; 
 	}
 	
+	t = time(NULL); 
+	mytime = asctime(gmtime(&t)); 
+	mytime[strlen(mytime)-1] = ' '; 
+	strcat(mytime, "GMT"); 
+	err = gethostname(hostname, sizeof(hostname)); 
+	if(err < 0) {printf("Error gethostname!\n"); exit(1); }
+	
 	fType = ftype(filename); 
 	fseek(pFile, 0, SEEK_END); 
 	fLength = ftell(pFile); 
 	fseek(pFile, 0, SEEK_SET); 
 	
-	sprintf(headBuf, buf, fType, fLength); 
+	sprintf(headBuf, buf, mytime, hostname, fType, fLength, mytime); 
 	write(cSocket, headBuf, strlen(headBuf)); 
 	
 	while(1) {
@@ -217,11 +227,14 @@ void doPost(int cSocket, char *filename)
 	int bytes, i, text_len, j; 
 	char state; 
 	char login[MAX_LOGIN_PASS_LEN], pass[MAX_LOGIN_PASS_LEN]; 
-	char buf[] = "HTTP/1.0 200 OK\r\nContent-type: text/html\r\nContent-length: %d\r\n\r\n%s"; 
+	char *mytime, hostname[30]; 
+	int err; 
+	time_t t; 
+	char buf[] = "HTTP/1.1 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-type: text/html\r\nContent-length: %d\r\nCache-Control: max-age=0\r\nExpires: %s\r\nVary: Accept-Encoding\r\n\r\n%s"; 
 	char error_id[] = "<html><title>Login Error!</title><body><p>Login id error!</p></body></html>"; 
 	char error_pass[] = "<html><title>Login Error!</title><body><p>Login password error!</p></body></html>"; 
 	char success[] = "<html><title>Login Success!</title><body><p>Login success, welcome!</p></body></html>"; 
-	char sndBuf[100]; 
+	char sndBuf[300]; 
 	if(filename == NULL) notFound(cSocket); 
 	post = strrchr(filename, '/'); 
 	post += 1; 
@@ -244,10 +257,18 @@ void doPost(int cSocket, char *filename)
 		else if(state == 3) pass[j++] = c; 
 	}
 	pass[j] = 0; 
+	
+	t = time(NULL); 
+	mytime = asctime(gmtime(&t)); 
+	mytime[strlen(mytime)-1] = ' '; 
+	strcat(mytime, "GMT"); 
+	err = gethostname(hostname, sizeof(hostname)); 
+	if(err < 0) {printf("Error gethostname!\n"); exit(1); }
+
 	if(strcmp(login, LOGIN_ID) == 0) 
-		if(strcmp(pass, LOGIN_PASS) == 0) sprintf(sndBuf, buf, strlen(success), success); 
-		else sprintf(sndBuf, buf, strlen(error_pass), error_pass); 
-	else sprintf(sndBuf, buf, strlen(error_id), error_id); 
+		if(strcmp(pass, LOGIN_PASS) == 0) sprintf(sndBuf, buf, mytime, hostname, strlen(success), mytime, success); 
+	else sprintf(sndBuf, buf, mytime, hostname, strlen(error_pass), mytime, error_pass); 
+	else sprintf(sndBuf, buf, mytime, hostname, strlen(error_id), mytime, error_id); 
 	write(cSocket, sndBuf, strlen(sndBuf)); 
 	return ; 
 }

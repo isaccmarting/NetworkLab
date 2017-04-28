@@ -12,7 +12,7 @@
 
 #include "myhttp.h"
 
-#define SERVER_PORT 2451
+#define SERVER_PORT 2442
 #define LISTEN_QUEUE_SIZE 10
 
 // server records the live connections 
