@@ -127,6 +127,7 @@ int thread_func(ConnectLog ConnectEntry)
 int main()
 {
 	int sSocket, myBind, myListen; 
+	int on = 1; 
 	int aSocket; 
 	struct sockaddr_in channel; 
 	ConnectLog ConnectTemp; 
