@@ -96,7 +96,7 @@ http_head getHead(int cSocket)
 	// get method 
 	for(i = 0; i < MAX_METHOD_LEN && read(cSocket, &c, 1) > 0 && c != ' ' && c != '\n'; i++) {
 		if(c != '\r')
-			pHttpHead -> method[i] = c
+			pHttpHead -> method[i] = c; 
 	}
 	pHttpHead -> method[i] = 0; 
 	// get file name 
