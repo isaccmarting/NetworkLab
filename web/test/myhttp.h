@@ -6,9 +6,9 @@
 #define MAX_VERSION_LEN 15
 
 struct http_head_ {
-    char method[MAX_METHOD_LEN]; 
-	char filename[MAX_FILENAME_LEN]; 
-	char version[MAX_VERSION_LEN]; 
+    char method[MAX_METHOD_LEN]; 		// http method 
+	char filename[MAX_FILENAME_LEN]; 	// http file name 
+	char version[MAX_VERSION_LEN]; 		// http version 
 }; 
 typedef struct http_head_* PtrTohttp_head_; 
 typedef PtrTohttp_head_ http_head; 
