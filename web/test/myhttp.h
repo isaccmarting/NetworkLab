@@ -15,5 +15,8 @@ typedef PtrTohttp_head_ http_head;
 
 extern http_head getHead(int cSocket); 
 extern void sendFile(int cSocket, char *filename); 
+extern void doPost(int cSocket, char *filename); 
+
+extern void notImplemented(int cSocket); 
 
 #endif

@@ -50,12 +50,13 @@ int CtrlC(int signalno)
 		ConnectTemp = ConnectEntry -> Next; 
 		free(ConnectEntry); 
 	}
+	close(ConnectList -> mySocket); 
 	free(ConnectList); 
 	printf("Exiting OK!\n"); 
 	exit(0); 
 }
 
-void thread_func(ConnectLog ConnectEntry)
+int thread_func(ConnectLog ConnectEntry)
 {
 	int cSocket; 
 	http_head pHttpHead; 
@@ -77,23 +78,34 @@ void thread_func(ConnectLog ConnectEntry)
 // 	printf("%d\n", EINVAL); 
 // 	printf("%d\n", EIO); 
 // 	printf("%d\n", EISDIR); 
-	while(1) {
+	// while(1) {
 		pHttpHead = getHead(cSocket); 
 		printf("Method: %s\n", pHttpHead -> method); 
 		printf("Filename: %s\n", pHttpHead -> filename); 
 		printf("Version: %s\n", pHttpHead -> version); 
-		if(strlen(pHttpHead -> method) == 0 || strlen(pHttpHead -> filename) == 0 || strlen(pHttpHead -> version) == 0) {
-			ConnectEntry -> Last -> Next = ConnectEntry -> Next; 
-			if(ConnectEntry -> Next != NULL)
-				ConnectEntry -> Next -> Last = ConnectEntry -> Last; 
-			free(ConnectEntry); 
-			break; 
+// 		if(strlen(pHttpHead -> method) == 0 || strlen(pHttpHead -> filename) == 0 || strlen(pHttpHead -> version) == 0) {
+// 			ConnectEntry -> Last -> Next = ConnectEntry -> Next; 
+// 			if(ConnectEntry -> Next != NULL)
+// 				ConnectEntry -> Next -> Last = ConnectEntry -> Last; 
+// 			free(ConnectEntry); 
+// 			break; 
+// 		}
+		if(strcmp(pHttpHead -> method, "GET") == 0) {
+			sendFile(cSocket, pHttpHead -> filename); 
+			WaitForNext(cSocket, 0); 
 		}
-		sendFile(cSocket, pHttpHead -> filename); 
+		else if(strcmp(pHttpHead -> method, "POST") == 0) doPost(cSocket, pHttpHead -> filename); 
+		else {
+			notImplemented(cSocket); 
+			WaitForNext(cSocket, 0); 
+		}
 		freeHead(pHttpHead); 
-		WaitForNext(cSocket); 
-	}
+	// }
 	
+	close(cSocket); 
+	ConnectEntry -> Last -> Next = ConnectEntry -> Next; 
+	if(ConnectEntry -> Next != NULL) ConnectEntry -> Next -> Last = ConnectEntry -> Last; 
+	free(ConnectEntry); 
 	pthread_exit(0); 
 }
 
@@ -126,6 +138,7 @@ int main()
 	
 	ConnectList = (struct ConnectRecord *) malloc(sizeof(struct ConnectRecord)); 
 	if(ConnectList == NULL) fatal("No memory for ConnectList!\n"); 
+	ConnectList -> mySocket = sSocket; 
 	ConnectList -> Last = NULL; 
 	ConnectList -> Next = NULL; 
 	
