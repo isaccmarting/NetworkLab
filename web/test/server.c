@@ -5,28 +5,31 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <errno.h>
 
 #include <pthread.h>
 #include <signal.h>
 
-#define SERVER_PORT 2442
+#include "myhttp.h"
+
+#define SERVER_PORT 2451
 #define LISTEN_QUEUE_SIZE 10
 
 // server records the live connections 
-struct S_ConnectRecord {
+struct ConnectRecord {
     int mySocket; 						// socket 
 	char* IP; 							// client IP address 
 	unsigned int port; 					// client port 
 	pthread_t tid; 						// thread id 
-	struct S_ConnectRecord *Last; 		// last connection record 
-	struct S_ConnectRecord *Next; 		// next connection record 
+	struct ConnectRecord *Last; 		// last connection record 
+	struct ConnectRecord *Next; 		// next connection record 
 }; 
-typedef struct S_ConnectRecord *PtrToS_ConnectRecord; 
-typedef PtrToS_ConnectRecord S_ConnectLog; 
+typedef struct ConnectRecord *PtrToConnectRecord; 
+typedef PtrToConnectRecord ConnectLog; 
 
-S_ConnectLog ConnectList = NULL; 
+ConnectLog ConnectList = NULL; 
 
-int fatal(chr *string)
+int fatal(char *string)
 {
 	printf("%s\n", string); 
 	exit(1); 
@@ -34,7 +37,7 @@ int fatal(chr *string)
 
 int CtrlC(int signalno)
 {
-	S_ConnectLog ConnectEntry, ConnectTemp; 
+	ConnectLog ConnectEntry, ConnectTemp; 
 	pthread_t tid; 
 	if(ConnectList == NULL) fatal("Invalid ConnectList!\n"); 
 	// free ConnectList 
@@ -54,22 +57,55 @@ int CtrlC(int signalno)
 
 void thread_func(ConnectLog ConnectEntry)
 {
-	pthread_setcancelstate(PTTHREAD_CANCEL_ENABLE, NULL); 
+	int cSocket; 
+	http_head pHttpHead; 
+	char buf[512]; 
+	int bytes; 
+	
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL); 
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL); 
 	
 	if(ConnectEntry == NULL) pthread_exit(0); 
+	cSocket = ConnectEntry -> mySocket; 
+	
+	printf("Connected: %s:%04x\n", ConnectEntry -> IP, ConnectEntry -> port); 
+// 	printf("%d\n", errno); 
+// 	printf("%d\n", EAGAIN); 
+// 	printf("%d\n", EBADF); 
+// 	printf("%d\n", EFAULT); 
+// 	printf("%d\n", EINTR); 
+// 	printf("%d\n", EINVAL); 
+// 	printf("%d\n", EIO); 
+// 	printf("%d\n", EISDIR); 
+	while(1) {
+		pHttpHead = getHead(cSocket); 
+		printf("Method: %s\n", pHttpHead -> method); 
+		printf("Filename: %s\n", pHttpHead -> filename); 
+		printf("Version: %s\n", pHttpHead -> version); 
+		if(strlen(pHttpHead -> method) == 0 || strlen(pHttpHead -> filename) == 0 || strlen(pHttpHead -> version) == 0) {
+			ConnectEntry -> Last -> Next = ConnectEntry -> Next; 
+			if(ConnectEntry -> Next != NULL)
+				ConnectEntry -> Next -> Last = ConnectEntry -> Last; 
+			free(ConnectEntry); 
+			break; 
+		}
+		sendFile(cSocket, pHttpHead -> filename); 
+		freeHead(pHttpHead); 
+		WaitForNext(cSocket); 
+	}
 	
 	pthread_exit(0); 
 }
 
 int main()
 {
-	int sSocket. myBind, myListen; 
+	int sSocket, myBind, myListen; 
 	int aSocket; 
 	struct sockaddr_in channel; 
 	ConnectLog ConnectTemp; 
 	int err; 
 	struct sockaddr_in aChannel; 
+	socklen_t SizeChannel; 
 	pthread_t tid; 
 	
 	signal(SIGINT, CtrlC); 
@@ -82,13 +118,13 @@ int main()
 	channel.sin_addr.s_addr = htonl(INADDR_ANY); 
 	channel.sin_port = htons(SERVER_PORT); 
 	
-	myBind = bind(sSocket, (sockaddr*)&channel, sizeof(channel)); 
+	myBind = bind(sSocket, (struct sockaddr*)&channel, sizeof(channel)); 
 	if(myBind < 0) fatal("Error bind!\n"); 
 	
 	myListen = listen(sSocket, LISTEN_QUEUE_SIZE); 
 	if(myListen < 0) fatal("Error listen!\n"); 
 	
-	ConnectList = (struct S_ConnectRecord *) malloc(sizeof(struct S_ConnectRecord)); 
+	ConnectList = (struct ConnectRecord *) malloc(sizeof(struct ConnectRecord)); 
 	if(ConnectList == NULL) fatal("No memory for ConnectList!\n"); 
 	ConnectList -> Last = NULL; 
 	ConnectList -> Next = NULL; 
@@ -97,13 +133,14 @@ int main()
 		aSocket = accept(sSocket, 0, 0); 
 		if(aSocket < 0) fatal("Error accept!\n"); 
 		
-		ConnectTemp = (struct S_ConnectRecord *) malloc(sizeof(struct S_ConnectRecord)); 
+		ConnectTemp = (struct ConnectRecord *) malloc(sizeof(struct ConnectRecord)); 
 		if(ConnectTemp == NULL) fatal("No memory for ConnectTemp!\n"); 
-		err = getpeername(aSocket, (sockaddr*)&aChannel, sizeof(aChannel)); 
+		SizeChannel = sizeof(aChannel); 
+		err = getpeername(aSocket, (struct sockaddr*)&aChannel, &SizeChannel); 
 		if(err < 0) fatal("Error getpeername!\n"); 
 		
 		ConnectTemp -> mySocket = aSocket; 
-		ConnectTemp -> IP = (char *) ntoa(aChannel.sin_addr); 
+		ConnectTemp -> IP = (char *) inet_ntoa(aChannel.sin_addr); 
 		ConnectTemp -> port = ntohs(aChannel.sin_port); 
 		ConnectTemp -> Last = ConnectList; 
 		ConnectTemp -> Next = ConnectList -> Next; 
@@ -111,11 +148,9 @@ int main()
 		if(ConnectTemp -> Next != NULL) 
 			ConnectTemp -> Next -> Last = ConnectTemp; 
 		
-		err = pthread_create(&tid, NULL, &thread_func, &ConnectTemp); 
+		err = pthread_create(&tid, NULL, thread_func, ConnectTemp); 
 		if(err < 0) fatal("Error pthread_create!\n"); 
 		ConnectTemp -> tid = tid; 
-		
-		close(aSocket); 
 	}
 	return 0; 
 }
