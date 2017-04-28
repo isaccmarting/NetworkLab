@@ -51,6 +51,7 @@ void CtrlC(int signalno)
 		ConnectTemp = ConnectEntry -> Next; 
 		free(ConnectEntry); 
     }
+	close(ConnectList -> mySocket); 
 	free(ConnectList); 
 	printf("Exiting OK!\n"); 
 	exit(0); 
@@ -244,7 +245,9 @@ int main(int argc, char *argv)
 
 	ConnectList = (S_ConnectLog) malloc(sizeof(struct S_ConnectRecord)); 
 	if(ConnectList == NULL) fatal("No memory for ConnectList!\n"); 
+	ConnectList -> mySocket = BaseSocket; 
 	ConnectList -> Next = NULL; 
+	ConnectList -> Last = NULL; 
 	
 	printf("Server is started!\n"); 
 	
